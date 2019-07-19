@@ -116,9 +116,9 @@ public abstract class GXWebObjectStub extends HttpServlet
 				Application.init(gxcfgClass);
 			}
 			httpContext = new HttpContextWeb(method, req, res, getServletContext());
-			if (DEBUG)
-				dumpRequestInfo(httpContext);
-			boolean useAuthentication = IntegratedSecurityEnabled();
+			/*if (DEBUG)
+				dumpRequestInfo(httpContext);*/
+			boolean useAuthentication = false;//IntegratedSecurityEnabled();
 			if (!useAuthentication)
 			{
 				callDoExecute(httpContext);
@@ -220,7 +220,7 @@ public abstract class GXWebObjectStub extends HttpServlet
 		if (logger == null) {
 			logger = com.genexus.specific.java.LogManager.initialize(req.getServletContext().getRealPath("/"), GXWebObjectStub.class);
 		}
-		setResponseBufferSize(res);
+		//setResponseBufferSize(res);
 	}
 
 	private void setResponseBufferSize(HttpServletResponse res) {

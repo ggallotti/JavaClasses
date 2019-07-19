@@ -19,7 +19,7 @@ public class InProcessCache implements ICacheService
 	protected boolean cacheEnabled;
 	protected DoubleLinkedQueue lru = new DoubleLinkedQueue();
 
-	private static final boolean DEBUG = com.genexus.DebugFlag.DEBUG;
+	private static final boolean DEBUG = false;
 	private ConcurrentHashMap<String, CacheValue> cache = new ConcurrentHashMap<String, CacheValue>();
 	private Object lockObject = new Object();
 
@@ -29,10 +29,7 @@ public class InProcessCache implements ICacheService
 
 		cacheStorageSize = prefs.getCACHE_STORAGE_SIZE() * 1024;
 		cacheEnabled = prefs.getCACHING();
-
-		//JMX Enabled
-		if (Application.isJMXEnabled())
-			CacheJMX.CreateCacheJMX(this);
+	
 	}
 
 	public boolean isEnabled()
@@ -78,10 +75,7 @@ public class InProcessCache implements ICacheService
 	@SuppressWarnings("unchecked")
 	private <T> T get(String key, Class<T> type)
 	{
-		if(DEBUG)
-		{
-			getStatsFor(key).hits++;
-		}
+	
 		CacheValue value = cache.get(key);
 	
 		if(value == null)
@@ -97,15 +91,9 @@ public class InProcessCache implements ICacheService
 			}
 			else
 			{
-				// If cache limit
-				if (cacheStorageSize != 0) {
-					lru.moveToStart(value); // Muevo el item al comienzo de la LRU
-				}
+				
 				value.incHits(); //TODO: this is not thread safe, we can miss hits for a value.
-				if(DEBUG)
-				{
-					getStatsFor(key).hitsAfterFullLoaded++;
-				}
+
 	
 				if ( type.isInstance(value) ) {
 				   return (T)value;
@@ -119,27 +107,12 @@ public class InProcessCache implements ICacheService
 	}
 	public void clear() {
 
-		//JMX Remove
-		if (Application.isJMXEnabled())
-			CacheJMX.DestroyCacheJMX();
 	}
 	
 	public void clearKey(String key, CacheValue value) {
 		if (value!=null)
 		{
-			if(DEBUG)
-			{
-				getStatsFor(value).removeFromStats(value);
-			}
-			if (cacheStorageSize != 0) {
-				synchronized (lockObject) {
-					lru.remove(value);
-					currentSize -= value.getSize();
-				}
-			}
-			//JMX Remove
-			if (Application.isJMXEnabled())
-				CacheItemJMX.DestroyCacheItemJMX(value);
+			
 			cache.remove(key);
 		}
 	}
@@ -198,6 +171,7 @@ public class InProcessCache implements ICacheService
 
 	public void clearAllCaches() {
 		cache.clear();
+		cacheStats.clear();
 	}
 
 	private String getKey(String cacheid, String key)
@@ -215,26 +189,11 @@ public class InProcessCache implements ICacheService
 	 */
 	private void add(String key, CacheValue value)
 	{
-		//JMX Enabled
-		if (Application.isJMXEnabled())
-			CacheItemJMX.CreateCacheItemJMX(value);
-
 		value.setTimestamp();
 		cache.put(key, value);
-
-		synchronized (lockObject) {
-			if(DEBUG)
-			{
-				getStatsFor(value).addToStats(value);
-				getStatsFor(value).TTL = value.getExpiryTimeMilliseconds();
-			}
-			currentSize += value.getSize();
-		}
+		
 		// Si el tamaño del cache excede el CacheMaximumSize debemos eliminar los mas viejos
 		ensureCacheSize();
-		if (cacheStorageSize != 0) {
-			lru.insert(value); // Agreo el item en la LRU
-		}
 
 	}
 
@@ -243,23 +202,15 @@ public class InProcessCache implements ICacheService
 			synchronized (lockObject) {
 				while (currentSize > cacheStorageSize)
 					{
-						CacheValue item = (CacheValue)lru.takeFromEnd();
+						CacheValue item = null;
 						if(item == null)
 						{
 							break;
 						}
 						currentSize -= item.getSize();
 
-						//JMX Remove
-						if (Application.isJMXEnabled())
-							CacheItemJMX.DestroyCacheItemJMX(item);
-
 						cache.remove(item.getKey().getKey());
-						cacheDrops++;
-						if(DEBUG)
-						{
-							getStatsFor(item).removeFromStats(item);
-						}
+						cacheDrops++;						
 					}	
 			}
 		}
@@ -272,20 +223,8 @@ public class InProcessCache implements ICacheService
 		{
 			CacheValue value = (CacheValue)enum1.nextElement();
 			if(value.hasExpired())
-			{
-				if(DEBUG)
-				{
-					String key = value.getKey().getKey();
-					getStatsFor(value).removeFromStats(value);
-				}
-				if (cacheStorageSize != 0) {
-					lru.remove(value);
-				}
+			{					
 				currentSize -= value.getSize();
-
-				//JMX Remove
-				if (Application.isJMXEnabled())
-					CacheItemJMX.DestroyCacheItemJMX(value);
 
 				cache.remove(value.getKey().getKey());
 			}

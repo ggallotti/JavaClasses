@@ -40,6 +40,7 @@ public class GXSmartCacheProvider implements IExtensionGXSmartCacheProvider {
 		{
 			if (isEnabled())
 			{
+				startupDate = new Date();
 				getUpdatedTables().<Date>set(CacheFactory.CACHE_SD, FORCED_INVALIDATE, CommonUtil.now(false,false));
 			}
 		}
@@ -56,8 +57,9 @@ public class GXSmartCacheProvider implements IExtensionGXSmartCacheProvider {
 		}
 		public void invalidate(String item)
 		{
-			if (isEnabled()) 
+			if (isEnabled())  {
 				getUpdatedTables().clear(CacheFactory.CACHE_SD, item);
+			}
 		}
 		public void recordUpdates()
 		{
