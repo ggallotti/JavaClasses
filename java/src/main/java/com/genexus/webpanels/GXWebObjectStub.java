@@ -118,7 +118,7 @@ public abstract class GXWebObjectStub extends HttpServlet
 			httpContext = new HttpContextWeb(method, req, res, getServletContext());
 			/*if (DEBUG)
 				dumpRequestInfo(httpContext);*/
-			boolean useAuthentication = false;//IntegratedSecurityEnabled();
+			boolean useAuthentication = IntegratedSecurityEnabled();
 			if (!useAuthentication)
 			{
 				callDoExecute(httpContext);
