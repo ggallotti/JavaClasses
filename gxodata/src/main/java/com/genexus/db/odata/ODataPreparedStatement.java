@@ -164,6 +164,11 @@ class ODataPreparedStatement extends ServicePreparedStatement
         {
             switch(ex.getStatusLine().getStatusCode())
             {
+				case 400:
+				{
+					ServiceError serviceError = ((ODataConnection)getConnection()).getServiceError(ex.getODataError().getCode());
+					throw new SQLException(ex.getMessage(), serviceError.getSqlState(), serviceError.getCode(), ex);
+				}
                 case 404: resCode = 404; break;
                 default:  throw new SQLException(ex.getMessage(), ServiceError.INVALID_QUERY.getSqlState(), ServiceError.INVALID_QUERY.getCode(), ex);
             }
@@ -179,7 +184,9 @@ class ODataPreparedStatement extends ServicePreparedStatement
     private URI getEditLink(ClientEntity entity, URI updURI)
     { // @hack: si la editLink retorna un schema distinto lo compatibilizo con el de la updURI porque sino luego Olingo da error en la checkRequest de AbstractRequest.java 
         URI editLink = entity.getEditLink();
-        if(!editLink.getScheme().equals(updURI.getScheme()))
+        if(editLink == null)
+        	editLink = updURI;
+        else if(!editLink.getScheme().equals(updURI.getScheme()))
         {
             try
             {

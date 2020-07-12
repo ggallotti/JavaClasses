@@ -457,8 +457,6 @@ public class PDFReportItext implements IReportHandler
 	  catch(DocumentException de) {
             System.err.println(de.getMessage());
       }
-      document.addAuthor(Const.AUTHOR);
-      document.addCreator(Const.CREATOR);
       document.open();
     }
 
@@ -880,7 +878,7 @@ public class PDFReportItext implements IReportHandler
 						bitmap = bitmap.replace(httpContext.getStaticContentBase(), "");
 					}				
 				
-					if(!new File(bitmap).isAbsolute() && !bitmap.toLowerCase().startsWith("http:"))
+					if(!new File(bitmap).isAbsolute() && !bitmap.toLowerCase().startsWith("http"))
 					{ 
 						if (bitmap.startsWith(httpContext.getStaticContentBase()))
 						{
@@ -935,7 +933,8 @@ public class PDFReportItext implements IReportHandler
 					image.scaleAbsolute(rightAux - leftAux , bottomAux - topAux);
 				else
 					image.scaleToFit(rightAux - leftAux , bottomAux - topAux);
-				document.add(image);
+				PdfContentByte cb = writer.getDirectContent();
+				cb.addImage(image);
 			}
 		}
 		catch(DocumentException de) 
@@ -975,14 +974,20 @@ public class PDFReportItext implements IReportHandler
     {
 		boolean isCJK = false;
 		boolean embeedFont = isEmbeddedFont(fontName);
+		String originalFontName = fontName;
 		if (!embeedFont)
 		{
 			fontName = getSubstitute(fontName); // Veo si hay substitutos solo si el font no va a ir embebido
 		}
         if(DEBUG)
 		{
+			String fontSubstitute = "";
+			if (!originalFontName.equals(fontName))
+			{
+				fontSubstitute = "Original Font: " + originalFontName + " Substitute";
+			}
 			DEBUG_STREAM.println("GxAttris: ");
-			DEBUG_STREAM.println("\\-> Font: " + fontName + " (" + fontSize + ")" + (fontBold ? " BOLD" : "") + (fontItalic ? " ITALIC" : "") + (fontStrikethru ? " Strike" : ""));
+			DEBUG_STREAM.println("\\-> " + fontSubstitute + "Font: " + fontName + " (" + fontSize + ")" + (fontBold ? " BOLD" : "") + (fontItalic ? " ITALIC" : "") + (fontStrikethru ? " Strike" : ""));
 			DEBUG_STREAM.println("\\-> Fore (" + foreRed + ", " + foreGreen + ", " + foreBlue + ")");
 			DEBUG_STREAM.println("\\-> Back (" + backRed + ", " + backGreen + ", " + backBlue + ")");
 		}
@@ -1054,6 +1059,18 @@ public class PDFReportItext implements IReportHandler
 			}
 			else
 			{//Si el Font es true type
+				String style = "";
+				if (fontBold && fontItalic)
+					style = ",BoldItalic";
+				else
+				{
+					if (fontItalic)
+						style = ",Italic";
+					if (fontBold)
+						style = ",Bold";
+				}
+
+				fontName = fontName + style;
 				String fontPath = getFontLocation(fontName);
 				boolean foundFont = true;
 				if (fontPath.equals(""))
@@ -1074,17 +1091,7 @@ public class PDFReportItext implements IReportHandler
 					}
 					else
 					{//No se embebe el font
-						String style = "";
-						if (fontBold && fontItalic)
-							style = ",BoldItalic";
-						else
-						{
-							if (fontItalic)
-								style = ",Italic";
-							if (fontBold)
-								style = ",Bold";
-						}
-							baseFont = BaseFont.createFont(fontPath + style, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED);
+						baseFont = BaseFont.createFont(fontPath + style, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED);
 					}
 				}
 			}
@@ -1205,6 +1212,8 @@ public class PDFReportItext implements IReportHandler
 		sTxt = CommonUtil.rtrim(sTxt);
 		
 		Font font = new Font(baseFont, fontSize);
+		cb.setFontAndSize(baseFont, fontSize);
+		cb.setColorFill(foreColor);
 		int arabicOptions = 0;
 		float captionHeight = 	baseFont.getFontDescriptor(baseFont.CAPHEIGHT, fontSize);
 		float rectangleWidth = baseFont.getWidthPoint(sTxt, fontSize); 
@@ -1486,9 +1495,6 @@ public class PDFReportItext implements IReportHandler
 			float TxtWidth = baseFont.getWidthPoint(sTxt, fontSize);
 			boolean justified = (alignment == 3) && textBlockWidth < TxtWidth;
 			boolean wrap = ((align & 16) == 16);
-
-			cb.setFontAndSize(baseFont, fontSize);
-			cb.setColorFill(foreColor);
 
 			//Justified
             if (wrap || justified)
