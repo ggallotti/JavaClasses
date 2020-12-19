@@ -140,6 +140,10 @@ public abstract class GXProcedure implements IErrorHandler, ISubmitteable
 	{
 		if(dbgInfo != null && Application.realMainProgram == this)
 			dbgInfo.onExit();
+		try
+		{
+			Application.getConnectionManager().flushBuffers(remoteHandle, this);
+		}catch(Exception exception){ ; }
 		if(disconnectUserAtCleanup)
 		{
 			try
@@ -168,17 +172,14 @@ public abstract class GXProcedure implements IErrorHandler, ISubmitteable
 
 	protected String formatLink(String jumpURL)
 	{
-		String lowURL = CommonUtil.lower(jumpURL);
-		String packageName = context.getPackageName();
+		return formatLink(jumpURL, new String[]{}, new String[]{});
+	}
 
-		// Convert 'call', adding package when needed
-		if	(com.genexus.webpanels.GXWebPanel.getStaticGeneration() && (lowURL.startsWith("http:" + packageName + "h") || lowURL.startsWith("https:" + packageName + "h")))
-		{
-			return  com.genexus.webpanels.WebUtils.getDynURL() + jumpURL.substring(lowURL.indexOf(':') + 1);
-		}
-
-		return jumpURL;
-	}	
+	protected String formatLink(String jumpURL, String[] parms, String[] parmsName)
+	{
+		String contextPath = (httpContext.getRequest() == null)? "" : httpContext.getRequest().getContextPath();
+		return URLRouter.getURLRoute(jumpURL, parms, parmsName, contextPath, context.getPackageName());
+	}
 	
 	public void callSubmit(final int id, Object [] submitParms)
 	{

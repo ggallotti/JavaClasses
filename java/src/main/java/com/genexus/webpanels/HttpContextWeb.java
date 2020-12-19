@@ -52,8 +52,11 @@ public class HttpContextWeb extends HttpContext {
 	HttpRequest httpReq;
 	ServletContext servletContext;
 
+	boolean useOldQueryStringFormat;
 	protected Vector<String> parms;
+	private Hashtable<String, String> namedParms;
 	private Hashtable<String, String[]> postData;
+	private boolean useNamedParameters;
 	private int currParameter;
 
 	private HttpServletRequest request;
@@ -61,7 +64,7 @@ public class HttpContextWeb extends HttpContext {
 	private String requestMethod;
 	protected String contentType = "";
 	private boolean SkipPushUrl = false;
-	private Hashtable<String, Cookie> cookies;
+	private Hashtable<String, String> cookies;
 	private boolean streamSet = false;
 	private WebSession webSession;
 	private FileItemCollection fileItemCollection;
@@ -69,6 +72,7 @@ public class HttpContextWeb extends HttpContext {
 	private boolean ajaxCallAsPOST = false;
 	private boolean htmlHeaderClosed = false;
 	private String sTmpDir;
+	private boolean firstParConsumed = false;
 
 	private static final Pattern USERAGENT_SEARCH_BOT = Pattern.compile("Googlebot|AhrefsBot|bingbot|MJ12bot",
 			Pattern.CASE_INSENSITIVE);
@@ -77,6 +81,7 @@ public class HttpContextWeb extends HttpContext {
 
 	private static final Pattern EDGE_BROWSER_VERSION_REGEX = Pattern.compile(" Edge\\/([0-9]+)\\.",
 			Pattern.CASE_INSENSITIVE);
+	private static final String GXEVENT_PARM = "gxevent";
 
 	public boolean isMultipartContent() {
 		return ServletFileUpload.isMultipartContent(request);
@@ -195,6 +200,7 @@ public class HttpContextWeb extends HttpContext {
 			o.httpReq = httpReq;
 			o.postData = postData;
 			o.parms = parms;
+			o.namedParms = namedParms;
 			o.streamSet = streamSet;
 			o.isCrawlerRequest = o.isCrawlerRequest();
 			copyCommon(o);
@@ -206,6 +212,11 @@ public class HttpContextWeb extends HttpContext {
 	}
 
 	public HttpContextWeb(String requestMethod, HttpServletRequest req, HttpServletResponse res,
+						  ServletContext servletContext) throws IOException {
+		this(ClientContext.getModelContext().getClientPreferences().getProperty("UseNamedParameters", "1").equals("1"), requestMethod, req, res, servletContext);
+	}
+
+	public HttpContextWeb(boolean useNamedParameters, String requestMethod, HttpServletRequest req, HttpServletResponse res,
 			ServletContext servletContext) throws IOException {
 		this.request = req;
 		this.response = res;
@@ -219,7 +230,7 @@ public class HttpContextWeb extends HttpContext {
 
 		GX_msglist = new MsgList();
 		postData = null;
-		cookies = new Hashtable<>();
+		cookies = new Hashtable<String, String>();
 
 		httpRes = new HttpResponse(this);
 		httpReq = new HttpRequestWeb(this);
@@ -228,6 +239,8 @@ public class HttpContextWeb extends HttpContext {
 
 		super.useUtf8 = true;
 		parms = new Vector<>();
+		namedParms = new Hashtable<>();
+		this.useNamedParameters = useNamedParameters;
 		loadParameters(req.getQueryString());
 		isCrawlerRequest = isCrawlerRequest();
 	}
@@ -236,19 +249,33 @@ public class HttpContextWeb extends HttpContext {
 		String value1;
 		initpars();
 		parms.clear();
+		namedParms.clear();
 		boolean oneParm = false;
 		if (value != null && value.length() > 0) {
+			useOldQueryStringFormat = !(useNamedParameters && removeInternalParms(value).contains("="));
+			String[] elements;
 			if (value.charAt(0) == '?')
 				value1 = value.substring(1);
 			else
 				value1 = value;
-			String[] elements = value1.split(",");
+			if (useOldQueryStringFormat)
+				elements = value1.split(",");
+			else
+				elements = value1.split("&");
 			oneParm = (elements.length > 0);
 			for (int i = 0; i < elements.length; i++) {
 				String parm = elements[i];
 				if (parm.indexOf("gx-no-cache=") != -1)
 					break;
-				parms.addElement(parm);
+				if (useOldQueryStringFormat)
+					parms.addElement(parm);
+				else {
+					String parameterValue = "";
+					if (parm.split("=").length > 1)
+						parameterValue = parm.split("=")[1];
+					parms.addElement(parameterValue);
+					namedParms.put(parm.split("=")[0].toLowerCase(), parameterValue);
+				}
 			}
 		}
 		if (requestMethod.equalsIgnoreCase("POST") && oneParm && parms.size() == 0) {
@@ -378,6 +405,31 @@ public class HttpContextWeb extends HttpContext {
 		}
 
 		return postData;
+	}
+
+	public String GetPar(String parameter) {
+		if (useOldQueryStringFormat)
+			return GetNextPar();
+		else {
+			String parm = namedParms.get(parameter.toLowerCase());
+			if (!ajaxCallAsPOST && parm != null) {
+				parm = GXutil.URLDecode(parm);
+			}
+			return parm == null? "" : parm;
+		}
+	}
+
+	public String GetFirstPar(String parameter) {
+		if (useOldQueryStringFormat)
+			return GetNextPar();
+		else {
+			if (!firstParConsumed && namedParms.containsKey(GXEVENT_PARM)) {
+				firstParConsumed = true;
+				return GetPar(GXEVENT_PARM);
+			}
+			else
+				return GetPar(parameter);
+		}
 	}
 
 	public String GetNextPar() {
@@ -632,12 +684,12 @@ public class HttpContextWeb extends HttpContext {
 					return BROWSER_IE;
 			} else if (userAgent.toUpperCase().indexOf("SAFARI") != -1) {
 				return BROWSER_SAFARI;
-			} else if (userAgent.toUpperCase().indexOf("MOZILLA/") != -1) {
-				return BROWSER_NETSCAPE;
 			} else if ((userAgent.indexOf("Trident")) != -1) {
 				return BROWSER_IE;
 			} else if (userAgent.toUpperCase().indexOf("OPERA") != -1) {
 				return BROWSER_OPERA;
+			} else if (userAgent.toUpperCase().indexOf("MOZILLA/") != -1) {
+				return BROWSER_NETSCAPE;
 			} else if (userAgent.toUpperCase().indexOf("UP.Browser") != -1) {
 				return BROWSER_UP;
 			} else if (USERAGENT_SEARCH_BOT.matcher(userAgent).find()) {
@@ -812,24 +864,23 @@ public class HttpContextWeb extends HttpContext {
 	}
 
 	public String getCookie(String name) {
-		Object o = cookies.get(name);
-		if (o != null) {
-			return WebUtils.decodeCookie(((Cookie) o).getValue());
+		if (cookies.containsKey(name)) {
+			return WebUtils.decodeCookie(cookies.get(name));
 		}
 
 		if (request != null) {
 			try {
 				Cookie[] cookies = request.getCookies();
-
 				if (cookies != null) {
 					for (int i = 0; i < cookies.length; i++) {
-						if (cookies[i].getName().equalsIgnoreCase(name)) {
-							return WebUtils.decodeCookie(cookies[i].getValue());
+						Cookie cookie = cookies[i];
+						if (cookie.getName().equalsIgnoreCase(name)) {
+							return WebUtils.decodeCookie(cookie.getValue());
 						}
 					}
 				}
 			} catch (Exception e) {
-				return "";
+				log.error("Failed getting cookie", e);
 			}
 		}
 
@@ -849,6 +900,8 @@ public class HttpContextWeb extends HttpContext {
 
 			if (path.trim().length() > 0)
 				cookie.setPath(path.trim());
+			else
+				cookie.setPath("/");
 
 			if (!expiry.equals(CommonUtil.nullDate())) {
 				long expiryTime = ((expiry.getTime() - new Date().getTime()) / 1000);
@@ -865,7 +918,8 @@ public class HttpContextWeb extends HttpContext {
 			if (servletContext.getMajorVersion() >= 3)
 				cookie.setHttpOnly(httpOnly); // Requiere servlet version 3.0
 			response.addCookie(cookie);
-			cookies.put(name, cookie);
+
+			cookies.put(name, value);
 		}
 
 		return 0;
@@ -886,7 +940,7 @@ public class HttpContextWeb extends HttpContext {
 			return host;
 		}
 		String serverNameProperty = ModelContext.getModelContext().getPreferences().getProperty("SERVER_NAME", "");
-		if (!serverNameProperty.equals("")) {
+		if (!StringUtils.isBlank(serverNameProperty)) {
 			return serverNameProperty;
 		}
 		if (request != null)
@@ -899,6 +953,10 @@ public class HttpContextWeb extends HttpContext {
 		String port = getHeader("X-Forwarded-Port");
 		if (port.length() > 0){
 			return Integer.parseInt(port);
+		}
+		String serverPortProperty = ModelContext.getModelContext().getPreferences().getProperty("SERVER_PORT", "");
+		if (!StringUtils.isBlank(serverPortProperty)) {
+			return Integer.parseInt(serverPortProperty);
 		}
 		String serverNameProperty = ModelContext.getModelContext().getPreferences().getProperty("SERVER_NAME", "");
 		if (serverNameProperty.indexOf(':') != -1) {
@@ -937,6 +995,11 @@ public class HttpContextWeb extends HttpContext {
 		if (protocol != null && !protocol.equals("")) {
 			return protocol.equalsIgnoreCase("https") ? 1 : 0;
 		}
+		String serverProtocolProperty = ModelContext.getModelContext().getPreferences().getProperty("SERVER_PROTOCOL", "");
+		if (!StringUtils.isBlank(serverProtocolProperty)) {
+			return serverProtocolProperty.equalsIgnoreCase("https") ? 1: 0;
+		}
+
 		if (request != null && request.getScheme() != null)
 			return request.getScheme().equalsIgnoreCase("http") ? 0 : 1;
 
@@ -1010,6 +1073,8 @@ public class HttpContextWeb extends HttpContext {
 	private String removeEventPrefix(String query) {
 		if (isAjaxEventMode()) {
 			int comIdx = query.indexOf(",");
+			if (comIdx == -1)
+				comIdx = query.indexOf("&");
 			if (comIdx != -1)
 				query = query.substring(comIdx + 1);
 		}
@@ -1284,7 +1349,7 @@ public class HttpContextWeb extends HttpContext {
 			String popupLvl = getNavigationHelper(false).getUrlPopupLevel(getRequestNavUrl());
 			String popLvlParm = "";
 			if (popupLvl != "-1") {
-				popLvlParm = (url.indexOf('?') != -1) ? "," : "?";
+				popLvlParm = (url.indexOf('?') != -1) ? (useOldQueryStringFormat? "," : "&") : "?";
 				popLvlParm += com.genexus.util.Encoder.encodeURL("gxPopupLevel=" + popupLvl + ";");
 			}
 

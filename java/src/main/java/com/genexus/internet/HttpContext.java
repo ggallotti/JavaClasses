@@ -264,6 +264,8 @@ public abstract class HttpContext
 	public abstract String getResourceRelative(String path, boolean includeBasePath);
 	public abstract String getResource(String path);
 	public abstract String GetNextPar();
+	public abstract String GetPar(String parameter);
+	public abstract String GetFirstPar(String parameter);
 	public abstract HttpContext copy();
 	public abstract byte setHeader(String header, String value);
 	public abstract void setDateHeader(String header, int value);
@@ -495,15 +497,16 @@ public abstract class HttpContext
 	{
 		AddStyleSheetFile(styleSheet, "");
 	}
+
 	public void AddStyleSheetFile(String styleSheet, String urlBuildNumber)
 	{
 		urlBuildNumber = getURLBuildNumber(styleSheet, urlBuildNumber);
 		AddStyleSheetFile(styleSheet, urlBuildNumber, false);
 	}
 
-	private String getURLBuildNumber(String styleSheet, String urlBuildNumber)
+	private String getURLBuildNumber(String resourcePath, String urlBuildNumber)
 	{
-		if(urlBuildNumber.isEmpty() && !GXutil.isAbsoluteURL(styleSheet))
+		if(urlBuildNumber.isEmpty() && !GXutil.isAbsoluteURL(resourcePath) && !GXutil.hasUrlQueryString(resourcePath))
 		{
 			return "?" + getCacheInvalidationToken();
 		}

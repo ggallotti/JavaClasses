@@ -2123,7 +2123,7 @@ public final class CommonUtil
                         }
                         else
                         {
-                                if(!(item instanceof String))
+                                if(item instanceof Number)
                                 {
                                         ret += item.toString();
                                 }
@@ -2594,7 +2594,12 @@ public final class CommonUtil
 
 	public static boolean isAbsoluteURL(String url)
 	{
-		return url.startsWith("http://") || url.startsWith("https://") || url.startsWith("ftp://");
+		return url.startsWith("http://") || url.startsWith("https://") || url.startsWith("ftp://") || url.startsWith("sd:");
+	}
+
+	public static boolean hasUrlQueryString(String url)
+	{
+		return url.indexOf("?") >= 0;
 	}
 
 	public static String encodeJSON(String in)
@@ -2945,10 +2950,10 @@ public final class CommonUtil
 				if (SpecificImplementation.KeepDecimals) {
 					int decimalsToKeep = Math.max(0, length-integerPart.length()-1);
 					decimalsToKeep = Math.min(decimals, decimalsToKeep);
-					return str(val(base), length, decimalsToKeep);
+					return str(decimalVal(base, "."), length, decimalsToKeep, round);
 				}
 				else
-					return str(val(base), length, 0);
+					return str(decimalVal(base, "."), length, 0, round);
 				}
 	 		}
 
